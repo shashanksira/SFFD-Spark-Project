@@ -1,0 +1,57 @@
+reload
+compile
+reload
+compile
+exit
+main/spark_main.scala
+main\spark_main.scala
+compile
+run
+compile
+exit
+compile
+run
+compile
+run
+reload
+compile
+run
+run job1
+reload
+compile
+run
+reload
+compile
+run
+reload
+compile
+run
+run asd
+compile
+run asd
+compile
+run asd
+compile
+run asd
+run job1
+compile
+run job1
+reload
+compile
+reload
+compile
+run asd
+reload
+compile
+run asd
+compile
+run asd
+compile
+run
+D:/Documents/sharpestminds/SparkProject/Data
+reload
+compile
+run job1
+df.show
+import org.apache.spark.sql.SaveMode
+exit

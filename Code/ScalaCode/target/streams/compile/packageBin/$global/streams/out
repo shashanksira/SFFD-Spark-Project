@@ -1,0 +1,15 @@
+[0m[[0m[0minfo[0m] [0m[0mPackaging D:\Documents\sharpestminds\SparkProject\Code\ScalaCode\target\scala-2.11\sparkproject_2.11-0.5.jar ...[0m
+[0m[[0m[0mdebug[0m] [0m[0mInput file mappings:[0m
+[0m[[0m[0mdebug[0m] [0m[0m	spark_main[0m
+[0m[[0m[0mdebug[0m] [0m[0m	  D:\Documents\sharpestminds\SparkProject\Code\ScalaCode\target\scala-2.11\classes\spark_main[0m
+[0m[[0m[0mdebug[0m] [0m[0m	job1\job1sub.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	  D:\Documents\sharpestminds\SparkProject\Code\ScalaCode\target\scala-2.11\classes\job1\job1sub.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	spark_main\spark_main.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	  D:\Documents\sharpestminds\SparkProject\Code\ScalaCode\target\scala-2.11\classes\spark_main\spark_main.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	spark_main\spark_main$.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	  D:\Documents\sharpestminds\SparkProject\Code\ScalaCode\target\scala-2.11\classes\spark_main\spark_main$.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	job1[0m
+[0m[[0m[0mdebug[0m] [0m[0m	  D:\Documents\sharpestminds\SparkProject\Code\ScalaCode\target\scala-2.11\classes\job1[0m
+[0m[[0m[0mdebug[0m] [0m[0m	job1\job1sub$.class[0m
+[0m[[0m[0mdebug[0m] [0m[0m	  D:\Documents\sharpestminds\SparkProject\Code\ScalaCode\target\scala-2.11\classes\job1\job1sub$.class[0m
+[0m[[0m[0minfo[0m] [0m[0mDone packaging.[0m
