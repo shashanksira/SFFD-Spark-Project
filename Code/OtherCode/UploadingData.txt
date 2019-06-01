@@ -1,1 +1,0 @@
-gsutil cp D:\Documents\sharpestminds\SparkProject\Data\FireDepartmentSample.csv gs://shashank-data
