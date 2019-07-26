@@ -1,0 +1,804 @@
+shashank@shashank-Inspiron-5577:~$ spark-shell
+2019-07-20 19:37:09 WARN  Utils:66 - Your hostname, shashank-Inspiron-5577 resolves to a loopback address: 127.0.1.1; using 10.238.255.11 instead (on interface wlp3s0)
+2019-07-20 19:37:09 WARN  Utils:66 - Set SPARK_LOCAL_IP if you need to bind to another address
+2019-07-20 19:37:10 WARN  NativeCodeLoader:62 - Unable to load native-hadoop library for your platform... using builtin-java classes where applicable
+Setting default log level to "WARN".
+To adjust logging level use sc.setLogLevel(newLevel). For SparkR, use setLogLevel(newLevel).
+Spark context Web UI available at http://10.238.255.11:4040
+Spark context available as 'sc' (master = local[*], app id = local-1563665834778).
+Spark session available as 'spark'.
+Welcome to
+      ____              __
+     / __/__  ___ _____/ /__
+    _\ \/ _ \/ _ `/ __/  '_/
+   /___/ .__/\_,_/_/ /_/\_\   version 2.3.3
+      /_/
+         
+Using Scala version 2.11.8 (OpenJDK 64-Bit Server VM, Java 1.8.0_212)
+Type in expressions to have them evaluated.
+Type :help for more information.
+
+scala> import org.apache.spark.ml.regression.LinearRegression
+import org.apache.spark.ml.regression.LinearRegression
+
+scala> import org.apache.spark.sql.functions._
+import org.apache.spark.sql.functions._
+
+scala> import org.apache.spark.sql.types._
+import org.apache.spark.sql.types._
+
+scala> import org.apache.spark.ml.evaluation.RegressionEvaluator
+import org.apache.spark.ml.evaluation.RegressionEvaluator
+
+scala> import org.apache.spark.ml.feature.StringIndexer
+import org.apache.spark.ml.feature.StringIndexer
+
+scala> import org.apache.spark.ml.feature.VectorAssembler
+import org.apache.spark.ml.feature.VectorAssembler
+
+scala> import org.apache.spark.ml.classification.LogisticRegression
+import org.apache.spark.ml.classification.LogisticRegression
+
+scala> import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.{DataFrame, SparkSession}
+
+scala> import org.apache.spark.sql.SaveMode
+import org.apache.spark.sql.SaveMode
+
+scala> import org.apache.spark.ml.tuning.{ParamGridBuilder, CrossValidator}
+import org.apache.spark.ml.tuning.{ParamGridBuilder, CrossValidator}
+
+scala> import org.apache.spark.ml.Pipeline
+import org.apache.spark.ml.Pipeline
+
+scala> import org.apache.spark.ml.regression.{RandomForestRegressionModel, RandomForestRegressor}
+import org.apache.spark.ml.regression.{RandomForestRegressionModel, RandomForestRegressor}
+
+scala> 
+
+scala> // Reading data 
+
+scala> val sampleData = spark.read.option("header", "true").csv("/home/shashank/Documents/gitWorkspace/SFFD-Spark-Project/Data/FireDepartmentBigHalfCleaned.csv").withColumn("response_time_double", $"response_time".cast(DoubleType ))
+2019-07-20 19:37:25 WARN  ObjectStore:568 - Failed to get database global_temp, returning NoSuchObjectException
+sampleData: org.apache.spark.sql.DataFrame = [Unit_ID: string, Incident_Number: string ... 19 more fields]
+
+scala> val data = spark.read.format("libsvm").load("sample_libsvm_data.txt")
+org.apache.spark.sql.AnalysisException: Path does not exist: file:/home/shashank/sample_libsvm_data.txt;
+  at org.apache.spark.sql.execution.datasources.DataSource$.org$apache$spark$sql$execution$datasources$DataSource$$checkAndGlobPathIfNecessary(DataSource.scala:719)
+  at org.apache.spark.sql.execution.datasources.DataSource$$anonfun$15.apply(DataSource.scala:390)
+  at org.apache.spark.sql.execution.datasources.DataSource$$anonfun$15.apply(DataSource.scala:390)
+  at scala.collection.TraversableLike$$anonfun$flatMap$1.apply(TraversableLike.scala:241)
+  at scala.collection.TraversableLike$$anonfun$flatMap$1.apply(TraversableLike.scala:241)
+  at scala.collection.immutable.List.foreach(List.scala:381)
+  at scala.collection.TraversableLike$class.flatMap(TraversableLike.scala:241)
+  at scala.collection.immutable.List.flatMap(List.scala:344)
+  at org.apache.spark.sql.execution.datasources.DataSource.resolveRelation(DataSource.scala:389)
+  at org.apache.spark.sql.DataFrameReader.loadV1Source(DataFrameReader.scala:239)
+  at org.apache.spark.sql.DataFrameReader.load(DataFrameReader.scala:227)
+  at org.apache.spark.sql.DataFrameReader.load(DataFrameReader.scala:174)
+  ... 53 elided
+
+scala> 
+
+scala> sampleData
+res0: org.apache.spark.sql.DataFrame = [Unit_ID: string, Incident_Number: string ... 19 more fields]
+
+scala> val sampleDataSubset = sampleData.select("Call_Type",
+     |     "Zipcode_of_Incident",
+     |     "Call_Type_Group",
+     |     "Unit_Type",
+     |     "Fire_Prevention_District",
+     |     "Supervisor_District",
+     |     "Received_month",
+     |     "Received_Hour",
+     |     "response_time_double").filter(
+     |     $"Call_Type".isNotNull
+     |     && $"Zipcode_of_Incident".isNotNull
+     |     && $"Unit_Type".isNotNull
+     |     && $"Fire_Prevention_District".isNotNull
+     |     && $"Supervisor_District".isNotNull
+     |     && $"Received_month".isNotNull
+     |     && $"Received_Hour".isNotNull
+     |     && $"response_time_double".isNotNull)
+sampleDataSubset: org.apache.spark.sql.Dataset[org.apache.spark.sql.Row] = [Call_Type: string, Zipcode_of_Incident: string ... 7 more fields]
+
+scala>     
+     | // Missing:    "avg_response_history")
+
+scala> 
+
+scala> 
+
+scala> // Indexing
+
+scala> val stringIndexerCallType = new StringIndexer().setInputCol(
+     |     "Call_Type").setOutputCol("call_type_vec")
+stringIndexerCallType: org.apache.spark.ml.feature.StringIndexer = strIdx_768cdf36ceb5
+
+scala> val stringIndexerZip = new StringIndexer().setInputCol(
+     |     "Zipcode_of_Incident").setOutputCol("zip_vec")
+stringIndexerZip: org.apache.spark.ml.feature.StringIndexer = strIdx_4fe29470fbf7
+
+scala> val stringIndexerUnitType = new StringIndexer().setInputCol(
+     |     "Unit_Type").setOutputCol("unit_type_vec")
+stringIndexerUnitType: org.apache.spark.ml.feature.StringIndexer = strIdx_8aa8054c5baa
+
+scala> val stringIndexerFPDistrict = new StringIndexer().setInputCol(
+     |     "Fire_Prevention_District").setOutputCol("fp_district_vec")
+stringIndexerFPDistrict: org.apache.spark.ml.feature.StringIndexer = strIdx_90c52c7ae2dc
+
+scala> val stringIndexerSupervisorDistrict = new StringIndexer().setInputCol(
+     |     "Supervisor_District").setOutputCol("super_district_vec")
+stringIndexerSupervisorDistrict: org.apache.spark.ml.feature.StringIndexer = strIdx_3701b20108fa
+
+scala> val stringIndexerReceivedMonth = new StringIndexer().setInputCol(
+     |     "Received_month").setOutputCol("rec_month_vec")
+stringIndexerReceivedMonth: org.apache.spark.ml.feature.StringIndexer = strIdx_936d8cab74bc
+
+scala> val stringIndexerReceivedHour = new StringIndexer().setInputCol(
+     |     "Received_Hour").setOutputCol("rec_hour_vec")
+stringIndexerReceivedHour: org.apache.spark.ml.feature.StringIndexer = strIdx_747a1fd182a7
+
+scala> 
+
+scala> val pipeline = new Pipeline().setStages(
+     |     Array(stringIndexerCallType, stringIndexerZip, stringIndexerUnitType, stringIndexerFPDistrict, stringIndexerSupervisorDistrict, stringIndexerReceivedMonth, stringIndexerReceivedHour))
+pipeline: org.apache.spark.ml.Pipeline = pipeline_2c71f5d5a1d2
+
+scala> 
+
+scala> val pmModel = pipeline.fit(sampleDataSubset)
+pmModel: org.apache.spark.ml.PipelineModel = pipeline_2c71f5d5a1d2              
+
+scala> 
+
+scala> val indexedDf1 = pmModel.transform(sampleDataSubset)
+indexedDf1: org.apache.spark.sql.DataFrame = [Call_Type: string, Zipcode_of_Incident: string ... 14 more fields]
+
+scala> val assembler1 = new VectorAssembler().setInputCols(
+     |     Array("call_type_vec", "zip_vec", "unit_type_vec", "fp_district_vec", "super_district_vec", "rec_month_vec", "rec_hour_vec")).setOutputCol("features")
+assembler1: org.apache.spark.ml.feature.VectorAssembler = vecAssembler_570a006e80e0
+
+scala> 
+
+scala> val featureDf = assembler1.transform(indexedDf1).select($"features", $"response_time_double".as("label"))
+featureDf: org.apache.spark.sql.DataFrame = [features: vector, label: double]
+
+scala> 
+
+scala> val Array(trainingDf, testDf) = featureDf.randomSplit(Array(0.8, 0.2), seed = 12345)
+trainingDf: org.apache.spark.sql.Dataset[org.apache.spark.sql.Row] = [features: vector, label: double]
+testDf: org.apache.spark.sql.Dataset[org.apache.spark.sql.Row] = [features: vector, label: double]
+
+scala> 
+
+scala> 
+
+scala> 
+
+scala> // kfold validation
+
+scala> 
+
+scala> val nFolds: Int = 5
+nFolds: Int = 5
+
+scala> val numTrees: Int = 10
+numTrees: Int = 10
+
+scala> val maxDepth: Int = 10
+maxDepth: Int = 10
+
+scala> val metric: String = "rmse"
+metric: String = rmse
+
+scala> 
+
+scala> val rf = new RandomForestRegressor().setLabelCol("label").setFeaturesCol("features").setNumTrees(numTrees).setMaxDepth(maxDepth)
+rf: org.apache.spark.ml.regression.RandomForestRegressor = rfr_2c4c7c91aed8
+
+scala> 
+
+scala> val pipeline = new Pipeline().setStages(Array(rf)) 
+pipeline: org.apache.spark.ml.Pipeline = pipeline_ad35171279b2
+
+scala> 
+
+scala> val paramGrid = new ParamGridBuilder().build() // No parameter search
+paramGrid: Array[org.apache.spark.ml.param.ParamMap] =
+Array({
+
+})
+
+scala> 
+
+scala> val evaluator = new RegressionEvaluator().setLabelCol("label").setPredictionCol("prediction").setMetricName("rmse")
+evaluator: org.apache.spark.ml.evaluation.RegressionEvaluator = regEval_87117afd653a
+
+scala> 
+
+scala> val cv = new CrossValidator().setEstimator(pipeline).setEvaluator(evaluator) .setEstimatorParamMaps(paramGrid).setNumFolds(nFolds)
+cv: org.apache.spark.ml.tuning.CrossValidator = cv_97c3377755a9
+
+scala> 
+
+scala> val validated_model = cv.fit(trainingDf) // trainingData: DataFrame
+[Stage 16:=======>                                                  (1 + 7) / 8]2019-07-20 19:38:14 WARN  MemoryStore:66 - Not enough space to cache rdd_85_3 in memory! (computed 20.0 MB so far)
+2019-07-20 19:38:14 WARN  MemoryStore:66 - Not enough space to cache rdd_85_2 in memory! (computed 20.0 MB so far)
+2019-07-20 19:38:14 WARN  MemoryStore:66 - Not enough space to cache rdd_85_6 in memory! (computed 20.0 MB so far)
+2019-07-20 19:38:14 WARN  BlockManager:66 - Persisting block rdd_85_6 to disk instead.
+2019-07-20 19:38:14 WARN  BlockManager:66 - Persisting block rdd_85_3 to disk instead.
+2019-07-20 19:38:14 WARN  BlockManager:66 - Persisting block rdd_85_2 to disk instead.
+2019-07-20 19:38:14 WARN  MemoryStore:66 - Not enough space to cache rdd_85_4 in memory! (computed 20.0 MB so far)
+2019-07-20 19:38:14 WARN  BlockManager:66 - Persisting block rdd_85_4 to disk instead.
+[Stage 17:>                                                         (0 + 8) / 8]2019-07-20 19:38:18 WARN  MemoryStore:66 - Not enough space to cache rdd_102_5 in memory! (computed 11.5 MB so far)
+2019-07-20 19:38:18 WARN  BlockManager:66 - Persisting block rdd_102_5 to disk instead.
+2019-07-20 19:38:18 WARN  MemoryStore:66 - Not enough space to cache rdd_102_6 in memory! (computed 7.7 MB so far)
+2019-07-20 19:38:18 WARN  MemoryStore:66 - Not enough space to cache rdd_102_2 in memory! (computed 11.5 MB so far)
+2019-07-20 19:38:18 WARN  BlockManager:66 - Persisting block rdd_102_2 to disk instead.
+2019-07-20 19:38:18 WARN  MemoryStore:66 - Not enough space to cache rdd_102_1 in memory! (computed 11.5 MB so far)
+2019-07-20 19:38:18 WARN  BlockManager:66 - Persisting block rdd_102_1 to disk instead.
+2019-07-20 19:38:18 WARN  MemoryStore:66 - Not enough space to cache rdd_102_0 in memory! (computed 7.7 MB so far)
+2019-07-20 19:38:18 WARN  BlockManager:66 - Persisting block rdd_102_0 to disk instead.
+2019-07-20 19:38:18 WARN  MemoryStore:66 - Not enough space to cache rdd_102_4 in memory! (computed 11.5 MB so far)
+2019-07-20 19:38:18 WARN  BlockManager:66 - Persisting block rdd_102_4 to disk instead.
+2019-07-20 19:38:18 WARN  MemoryStore:66 - Not enough space to cache rdd_102_3 in memory! (computed 11.5 MB so far)
+2019-07-20 19:38:18 WARN  BlockManager:66 - Persisting block rdd_102_3 to disk instead.
+2019-07-20 19:38:18 WARN  BlockManager:66 - Persisting block rdd_102_6 to disk instead.
+2019-07-20 19:38:18 WARN  MemoryStore:66 - Not enough space to cache rdd_102_7 in memory! (computed 11.5 MB so far)
+2019-07-20 19:38:18 WARN  BlockManager:66 - Persisting block rdd_102_7 to disk instead.
+2019-07-20 19:38:20 WARN  MemoryStore:66 - Not enough space to cache rdd_102_2 in memory! (computed 41.1 MB so far)
+2019-07-20 19:38:20 WARN  MemoryStore:66 - Not enough space to cache rdd_102_6 in memory! (computed 41.1 MB so far)
+2019-07-20 19:38:20 WARN  MemoryStore:66 - Not enough space to cache rdd_102_7 in memory! (computed 41.1 MB so far)
+2019-07-20 19:38:20 WARN  MemoryStore:66 - Not enough space to cache rdd_102_1 in memory! (computed 41.1 MB so far)
+2019-07-20 19:38:20 WARN  MemoryStore:66 - Not enough space to cache rdd_102_5 in memory! (computed 41.1 MB so far)
+2019-07-20 19:38:20 WARN  MemoryStore:66 - Not enough space to cache rdd_102_3 in memory! (computed 41.1 MB so far)
+2019-07-20 19:38:20 WARN  MemoryStore:66 - Not enough space to cache rdd_102_0 in memory! (computed 41.1 MB so far)
+[Stage 19:>                                                         (0 + 8) / 8]2019-07-20 19:38:24 WARN  MemoryStore:66 - Not enough space to cache rdd_102_3 in memory! (computed 41.1 MB so far)
+2019-07-20 19:38:24 WARN  MemoryStore:66 - Not enough space to cache rdd_102_6 in memory! (computed 41.1 MB so far)
+2019-07-20 19:38:24 WARN  MemoryStore:66 - Not enough space to cache rdd_102_0 in memory! (computed 41.1 MB so far)
+2019-07-20 19:38:24 WARN  MemoryStore:66 - Not enough space to cache rdd_102_5 in memory! (computed 41.1 MB so far)
+2019-07-20 19:38:24 WARN  MemoryStore:66 - Not enough space to cache rdd_102_7 in memory! (computed 41.1 MB so far)
+2019-07-20 19:38:24 WARN  MemoryStore:66 - Not enough space to cache rdd_102_2 in memory! (computed 41.1 MB so far)
+2019-07-20 19:38:25 WARN  MemoryStore:66 - Not enough space to cache rdd_102_5 in memory! (computed 41.1 MB so far)
+[Stage 21:>                                                         (0 + 8) / 8]2019-07-20 19:38:25 WARN  MemoryStore:66 - Not enough space to cache rdd_102_7 in memory! (computed 41.1 MB so far)
+2019-07-20 19:38:25 WARN  MemoryStore:66 - Not enough space to cache rdd_102_3 in memory! (computed 41.1 MB so far)
+2019-07-20 19:38:25 WARN  MemoryStore:66 - Not enough space to cache rdd_102_2 in memory! (computed 41.1 MB so far)
+2019-07-20 19:38:25 WARN  MemoryStore:66 - Not enough space to cache rdd_102_6 in memory! (computed 41.1 MB so far)
+2019-07-20 19:38:25 WARN  MemoryStore:66 - Not enough space to cache rdd_102_0 in memory! (computed 41.1 MB so far)
+[Stage 23:>                                                         (0 + 8) / 8]2019-07-20 19:38:27 WARN  MemoryStore:66 - Not enough space to cache rdd_102_2 in memory! (computed 41.1 MB so far)
+2019-07-20 19:38:28 WARN  MemoryStore:66 - Not enough space to cache rdd_102_7 in memory! (computed 41.1 MB so far)
+2019-07-20 19:38:28 WARN  MemoryStore:66 - Not enough space to cache rdd_102_3 in memory! (computed 41.1 MB so far)
+2019-07-20 19:38:28 WARN  MemoryStore:66 - Not enough space to cache rdd_102_6 in memory! (computed 41.1 MB so far)
+2019-07-20 19:38:28 WARN  MemoryStore:66 - Not enough space to cache rdd_102_5 in memory! (computed 41.1 MB so far)
+2019-07-20 19:38:28 WARN  MemoryStore:66 - Not enough space to cache rdd_102_0 in memory! (computed 41.1 MB so far)
+[Stage 25:>                                                         (0 + 8) / 8]2019-07-20 19:38:30 WARN  MemoryStore:66 - Not enough space to cache rdd_102_5 in memory! (computed 41.1 MB so far)
+2019-07-20 19:38:30 WARN  MemoryStore:66 - Not enough space to cache rdd_102_6 in memory! (computed 41.1 MB so far)
+2019-07-20 19:38:30 WARN  MemoryStore:66 - Not enough space to cache rdd_102_0 in memory! (computed 41.1 MB so far)
+2019-07-20 19:38:31 WARN  MemoryStore:66 - Not enough space to cache rdd_102_7 in memory! (computed 41.1 MB so far)
+2019-07-20 19:38:31 WARN  MemoryStore:66 - Not enough space to cache rdd_102_2 in memory! (computed 41.1 MB so far)
+2019-07-20 19:38:31 WARN  MemoryStore:66 - Not enough space to cache rdd_102_3 in memory! (computed 41.1 MB so far)
+2019-07-20 19:38:34 WARN  MemoryStore:66 - Not enough space to cache rdd_102_0 in memory! (computed 41.1 MB so far)
+2019-07-20 19:38:34 WARN  MemoryStore:66 - Not enough space to cache rdd_102_2 in memory! (computed 41.1 MB so far)
+2019-07-20 19:38:34 WARN  MemoryStore:66 - Not enough space to cache rdd_102_7 in memory! (computed 41.1 MB so far)
+2019-07-20 19:38:34 WARN  MemoryStore:66 - Not enough space to cache rdd_102_3 in memory! (computed 41.1 MB so far)
+[Stage 27:>                                                         (0 + 8) / 8]2019-07-20 19:38:34 WARN  MemoryStore:66 - Not enough space to cache rdd_102_6 in memory! (computed 41.1 MB so far)
+2019-07-20 19:38:34 WARN  MemoryStore:66 - Not enough space to cache rdd_102_5 in memory! (computed 41.1 MB so far)
+[Stage 29:>                                                         (0 + 8) / 8]2019-07-20 19:38:37 WARN  MemoryStore:66 - Not enough space to cache rdd_102_5 in memory! (computed 41.1 MB so far)
+2019-07-20 19:38:37 WARN  MemoryStore:66 - Not enough space to cache rdd_102_3 in memory! (computed 41.1 MB so far)
+2019-07-20 19:38:37 WARN  MemoryStore:66 - Not enough space to cache rdd_102_6 in memory! (computed 41.1 MB so far)
+2019-07-20 19:38:37 WARN  MemoryStore:66 - Not enough space to cache rdd_102_7 in memory! (computed 41.1 MB so far)
+2019-07-20 19:38:37 WARN  MemoryStore:66 - Not enough space to cache rdd_102_0 in memory! (computed 41.1 MB so far)
+2019-07-20 19:38:38 WARN  MemoryStore:66 - Not enough space to cache rdd_102_2 in memory! (computed 41.1 MB so far)
+2019-07-20 19:38:41 WARN  MemoryStore:66 - Not enough space to cache rdd_102_0 in memory! (computed 41.1 MB so far)
+[Stage 31:>                                                         (0 + 8) / 8]2019-07-20 19:38:42 WARN  MemoryStore:66 - Not enough space to cache rdd_102_6 in memory! (computed 41.1 MB so far)
+2019-07-20 19:38:42 WARN  MemoryStore:66 - Not enough space to cache rdd_102_7 in memory! (computed 41.1 MB so far)
+2019-07-20 19:38:42 WARN  MemoryStore:66 - Not enough space to cache rdd_102_2 in memory! (computed 41.1 MB so far)
+2019-07-20 19:38:42 WARN  MemoryStore:66 - Not enough space to cache rdd_102_3 in memory! (computed 41.1 MB so far)
+2019-07-20 19:38:42 WARN  MemoryStore:66 - Not enough space to cache rdd_102_5 in memory! (computed 41.1 MB so far)
+[Stage 33:>                                                         (0 + 8) / 8]2019-07-20 19:38:46 WARN  MemoryStore:66 - Not enough space to cache rdd_102_6 in memory! (computed 41.1 MB so far)
+2019-07-20 19:38:46 WARN  MemoryStore:66 - Not enough space to cache rdd_102_3 in memory! (computed 41.1 MB so far)
+2019-07-20 19:38:46 WARN  MemoryStore:66 - Not enough space to cache rdd_102_5 in memory! (computed 41.1 MB so far)
+2019-07-20 19:38:46 WARN  MemoryStore:66 - Not enough space to cache rdd_102_7 in memory! (computed 41.1 MB so far)
+2019-07-20 19:38:46 WARN  MemoryStore:66 - Not enough space to cache rdd_102_0 in memory! (computed 41.1 MB so far)
+2019-07-20 19:38:46 WARN  MemoryStore:66 - Not enough space to cache rdd_102_2 in memory! (computed 41.1 MB so far)
+[Stage 35:>                                                         (0 + 8) / 8]2019-07-20 19:38:51 WARN  MemoryStore:66 - Not enough space to cache rdd_102_0 in memory! (computed 41.1 MB so far)
+2019-07-20 19:38:51 WARN  MemoryStore:66 - Not enough space to cache rdd_102_7 in memory! (computed 41.1 MB so far)
+2019-07-20 19:38:51 WARN  MemoryStore:66 - Not enough space to cache rdd_102_6 in memory! (computed 41.1 MB so far)
+2019-07-20 19:38:51 WARN  MemoryStore:66 - Not enough space to cache rdd_102_5 in memory! (computed 41.1 MB so far)
+2019-07-20 19:38:51 WARN  MemoryStore:66 - Not enough space to cache rdd_102_3 in memory! (computed 41.1 MB so far)
+2019-07-20 19:38:51 WARN  MemoryStore:66 - Not enough space to cache rdd_102_2 in memory! (computed 41.1 MB so far)
+[Stage 41:=======>                                                  (1 + 7) / 8]2019-07-20 19:46:13 WARN  MemoryStore:66 - Not enough space to cache rdd_147_5 in memory! (computed 20.0 MB so far)
+2019-07-20 19:46:13 WARN  BlockManager:66 - Persisting block rdd_147_5 to disk instead.
+2019-07-20 19:46:15 WARN  MemoryStore:66 - Not enough space to cache rdd_147_4 in memory! (computed 20.0 MB so far)
+2019-07-20 19:46:15 WARN  BlockManager:66 - Persisting block rdd_147_4 to disk instead.
+2019-07-20 19:46:16 WARN  MemoryStore:66 - Not enough space to cache rdd_147_1 in memory! (computed 20.0 MB so far)
+2019-07-20 19:46:16 WARN  BlockManager:66 - Persisting block rdd_147_1 to disk instead.
+[Stage 42:>                                                         (0 + 8) / 8]2019-07-20 19:46:35 WARN  MemoryStore:66 - Not enough space to cache rdd_164_3 in memory! (computed 7.7 MB so far)
+2019-07-20 19:46:35 WARN  BlockManager:66 - Persisting block rdd_164_3 to disk instead.
+2019-07-20 19:46:35 WARN  MemoryStore:66 - Not enough space to cache rdd_164_6 in memory! (computed 7.7 MB so far)
+2019-07-20 19:46:35 WARN  BlockManager:66 - Persisting block rdd_164_6 to disk instead.
+2019-07-20 19:46:36 WARN  MemoryStore:66 - Not enough space to cache rdd_164_0 in memory! (computed 11.5 MB so far)
+2019-07-20 19:46:36 WARN  MemoryStore:66 - Not enough space to cache rdd_164_4 in memory! (computed 11.5 MB so far)
+2019-07-20 19:46:36 WARN  BlockManager:66 - Persisting block rdd_164_4 to disk instead.
+2019-07-20 19:46:36 WARN  BlockManager:66 - Persisting block rdd_164_0 to disk instead.
+2019-07-20 19:46:36 WARN  MemoryStore:66 - Not enough space to cache rdd_164_1 in memory! (computed 11.5 MB so far)
+2019-07-20 19:46:36 WARN  BlockManager:66 - Persisting block rdd_164_1 to disk instead.
+2019-07-20 19:46:36 WARN  MemoryStore:66 - Not enough space to cache rdd_164_7 in memory! (computed 11.5 MB so far)
+2019-07-20 19:46:36 WARN  BlockManager:66 - Persisting block rdd_164_7 to disk instead.
+2019-07-20 19:46:36 WARN  MemoryStore:66 - Not enough space to cache rdd_164_5 in memory! (computed 11.5 MB so far)
+2019-07-20 19:46:36 WARN  BlockManager:66 - Persisting block rdd_164_5 to disk instead.
+2019-07-20 19:46:36 WARN  MemoryStore:66 - Not enough space to cache rdd_164_2 in memory! (computed 11.5 MB so far)
+2019-07-20 19:46:36 WARN  BlockManager:66 - Persisting block rdd_164_2 to disk instead.
+2019-07-20 19:47:09 WARN  MemoryStore:66 - Not enough space to cache rdd_164_5 in memory! (computed 41.1 MB so far)
+2019-07-20 19:47:10 WARN  MemoryStore:66 - Not enough space to cache rdd_164_4 in memory! (computed 41.1 MB so far)
+2019-07-20 19:47:11 WARN  MemoryStore:66 - Not enough space to cache rdd_164_0 in memory! (computed 41.1 MB so far)
+2019-07-20 19:47:11 WARN  MemoryStore:66 - Not enough space to cache rdd_164_2 in memory! (computed 41.1 MB so far)
+2019-07-20 19:47:11 WARN  MemoryStore:66 - Not enough space to cache rdd_164_6 in memory! (computed 41.1 MB so far)
+2019-07-20 19:47:11 WARN  MemoryStore:66 - Not enough space to cache rdd_164_3 in memory! (computed 41.1 MB so far)
+2019-07-20 19:47:11 WARN  MemoryStore:66 - Not enough space to cache rdd_164_1 in memory! (computed 41.1 MB so far)
+[Stage 44:>                                                         (0 + 8) / 8]2019-07-20 19:47:45 WARN  MemoryStore:66 - Not enough space to cache rdd_164_0 in memory! (computed 41.1 MB so far)
+2019-07-20 19:47:45 WARN  MemoryStore:66 - Not enough space to cache rdd_164_1 in memory! (computed 41.1 MB so far)
+2019-07-20 19:47:45 WARN  MemoryStore:66 - Not enough space to cache rdd_164_2 in memory! (computed 41.1 MB so far)
+2019-07-20 19:47:45 WARN  MemoryStore:66 - Not enough space to cache rdd_164_3 in memory! (computed 41.1 MB so far)
+2019-07-20 19:47:47 WARN  MemoryStore:66 - Not enough space to cache rdd_164_4 in memory! (computed 41.1 MB so far)
+2019-07-20 19:47:47 WARN  MemoryStore:66 - Not enough space to cache rdd_164_5 in memory! (computed 41.1 MB so far)
+[Stage 46:>                                                         (0 + 8) / 8]2019-07-20 19:48:22 WARN  MemoryStore:66 - Not enough space to cache rdd_164_5 in memory! (computed 41.1 MB so far)
+2019-07-20 19:48:22 WARN  MemoryStore:66 - Not enough space to cache rdd_164_4 in memory! (computed 41.1 MB so far)
+2019-07-20 19:48:22 WARN  MemoryStore:66 - Not enough space to cache rdd_164_2 in memory! (computed 41.1 MB so far)
+2019-07-20 19:48:22 WARN  MemoryStore:66 - Not enough space to cache rdd_164_3 in memory! (computed 41.1 MB so far)
+2019-07-20 19:48:22 WARN  MemoryStore:66 - Not enough space to cache rdd_164_1 in memory! (computed 41.1 MB so far)
+2019-07-20 19:48:22 WARN  MemoryStore:66 - Not enough space to cache rdd_164_0 in memory! (computed 41.1 MB so far)
+[Stage 48:>                                                         (0 + 8) / 8]2019-07-20 19:48:57 WARN  MemoryStore:66 - Not enough space to cache rdd_164_4 in memory! (computed 41.1 MB so far)
+2019-07-20 19:48:57 WARN  MemoryStore:66 - Not enough space to cache rdd_164_0 in memory! (computed 41.1 MB so far)
+2019-07-20 19:48:58 WARN  MemoryStore:66 - Not enough space to cache rdd_164_3 in memory! (computed 41.1 MB so far)
+2019-07-20 19:48:58 WARN  MemoryStore:66 - Not enough space to cache rdd_164_5 in memory! (computed 41.1 MB so far)
+2019-07-20 19:48:58 WARN  MemoryStore:66 - Not enough space to cache rdd_164_2 in memory! (computed 41.1 MB so far)
+2019-07-20 19:49:05 WARN  MemoryStore:66 - Not enough space to cache rdd_164_1 in memory! (computed 41.1 MB so far)
+[Stage 50:>                                                         (0 + 8) / 8]2019-07-20 19:49:48 WARN  MemoryStore:66 - Not enough space to cache rdd_164_5 in memory! (computed 41.1 MB so far)
+2019-07-20 19:49:48 WARN  MemoryStore:66 - Not enough space to cache rdd_164_4 in memory! (computed 41.1 MB so far)
+2019-07-20 19:49:48 WARN  MemoryStore:66 - Not enough space to cache rdd_164_1 in memory! (computed 41.1 MB so far)
+2019-07-20 19:49:48 WARN  MemoryStore:66 - Not enough space to cache rdd_164_2 in memory! (computed 41.1 MB so far)
+2019-07-20 19:49:48 WARN  MemoryStore:66 - Not enough space to cache rdd_164_3 in memory! (computed 41.1 MB so far)
+2019-07-20 19:49:48 WARN  MemoryStore:66 - Not enough space to cache rdd_164_0 in memory! (computed 41.1 MB so far)
+[Stage 52:>                                                         (0 + 8) / 8]2019-07-20 19:50:43 WARN  MemoryStore:66 - Not enough space to cache rdd_164_2 in memory! (computed 41.1 MB so far)
+2019-07-20 19:50:50 WARN  MemoryStore:66 - Not enough space to cache rdd_164_4 in memory! (computed 41.1 MB so far)
+2019-07-20 19:50:50 WARN  MemoryStore:66 - Not enough space to cache rdd_164_1 in memory! (computed 41.1 MB so far)
+2019-07-20 19:50:50 WARN  MemoryStore:66 - Not enough space to cache rdd_164_0 in memory! (computed 41.1 MB so far)
+2019-07-20 19:50:50 WARN  MemoryStore:66 - Not enough space to cache rdd_164_5 in memory! (computed 41.1 MB so far)
+2019-07-20 19:50:50 WARN  MemoryStore:66 - Not enough space to cache rdd_164_3 in memory! (computed 41.1 MB so far)
+[Stage 54:>                                                         (0 + 8) / 8]2019-07-20 19:51:53 WARN  MemoryStore:66 - Not enough space to cache rdd_164_4 in memory! (computed 41.1 MB so far)
+2019-07-20 19:51:53 WARN  MemoryStore:66 - Not enough space to cache rdd_164_5 in memory! (computed 41.1 MB so far)
+2019-07-20 19:51:53 WARN  MemoryStore:66 - Not enough space to cache rdd_164_3 in memory! (computed 41.1 MB so far)
+2019-07-20 19:51:53 WARN  MemoryStore:66 - Not enough space to cache rdd_164_1 in memory! (computed 41.1 MB so far)
+2019-07-20 19:51:53 WARN  MemoryStore:66 - Not enough space to cache rdd_164_2 in memory! (computed 41.1 MB so far)
+2019-07-20 19:51:53 WARN  MemoryStore:66 - Not enough space to cache rdd_164_0 in memory! (computed 41.1 MB so far)
+[Stage 56:>                                                         (0 + 8) / 8]2019-07-20 19:53:08 WARN  MemoryStore:66 - Not enough space to cache rdd_164_2 in memory! (computed 41.1 MB so far)
+2019-07-20 19:53:09 WARN  MemoryStore:66 - Not enough space to cache rdd_164_0 in memory! (computed 41.1 MB so far)
+2019-07-20 19:53:09 WARN  MemoryStore:66 - Not enough space to cache rdd_164_3 in memory! (computed 41.1 MB so far)
+2019-07-20 19:53:09 WARN  MemoryStore:66 - Not enough space to cache rdd_164_5 in memory! (computed 41.1 MB so far)
+2019-07-20 19:53:09 WARN  MemoryStore:66 - Not enough space to cache rdd_164_4 in memory! (computed 41.1 MB so far)
+2019-07-20 19:53:09 WARN  MemoryStore:66 - Not enough space to cache rdd_164_1 in memory! (computed 41.1 MB so far)
+[Stage 58:>                                                         (0 + 8) / 8]2019-07-20 19:54:33 WARN  MemoryStore:66 - Not enough space to cache rdd_164_3 in memory! (computed 41.1 MB so far)
+2019-07-20 19:54:33 WARN  MemoryStore:66 - Not enough space to cache rdd_164_1 in memory! (computed 41.1 MB so far)
+2019-07-20 19:54:33 WARN  MemoryStore:66 - Not enough space to cache rdd_164_4 in memory! (computed 41.1 MB so far)
+2019-07-20 19:54:33 WARN  MemoryStore:66 - Not enough space to cache rdd_164_5 in memory! (computed 41.1 MB so far)
+2019-07-20 19:54:33 WARN  MemoryStore:66 - Not enough space to cache rdd_164_0 in memory! (computed 41.1 MB so far)
+2019-07-20 19:54:34 WARN  MemoryStore:66 - Not enough space to cache rdd_164_2 in memory! (computed 41.1 MB so far)
+[Stage 60:>                                                         (0 + 8) / 8]2019-07-20 19:56:07 WARN  MemoryStore:66 - Not enough space to cache rdd_164_5 in memory! (computed 41.1 MB so far)
+2019-07-20 19:56:07 WARN  MemoryStore:66 - Not enough space to cache rdd_164_3 in memory! (computed 41.1 MB so far)
+2019-07-20 19:56:08 WARN  MemoryStore:66 - Not enough space to cache rdd_164_1 in memory! (computed 41.1 MB so far)
+2019-07-20 19:56:08 WARN  MemoryStore:66 - Not enough space to cache rdd_164_4 in memory! (computed 41.1 MB so far)
+2019-07-20 19:56:08 WARN  MemoryStore:66 - Not enough space to cache rdd_164_2 in memory! (computed 41.1 MB so far)
+2019-07-20 19:56:08 WARN  MemoryStore:66 - Not enough space to cache rdd_164_0 in memory! (computed 41.1 MB so far)
+[Stage 66:=======>                                                  (1 + 7) / 8]2019-07-20 20:08:05 WARN  MemoryStore:66 - Not enough space to cache rdd_209_7 in memory! (computed 20.0 MB so far)
+2019-07-20 20:08:05 WARN  BlockManager:66 - Persisting block rdd_209_7 to disk instead.
+2019-07-20 20:08:05 WARN  MemoryStore:66 - Not enough space to cache rdd_209_2 in memory! (computed 20.0 MB so far)
+2019-07-20 20:08:05 WARN  BlockManager:66 - Persisting block rdd_209_2 to disk instead.
+2019-07-20 20:08:06 WARN  MemoryStore:66 - Not enough space to cache rdd_209_4 in memory! (computed 20.0 MB so far)
+2019-07-20 20:08:06 WARN  BlockManager:66 - Persisting block rdd_209_4 to disk instead.
+2019-07-20 20:08:07 WARN  MemoryStore:66 - Not enough space to cache rdd_209_3 in memory! (computed 20.0 MB so far)
+2019-07-20 20:08:07 WARN  BlockManager:66 - Persisting block rdd_209_3 to disk instead.
+[Stage 67:>                                                         (0 + 8) / 8]2019-07-20 20:08:23 WARN  MemoryStore:66 - Not enough space to cache rdd_226_1 in memory! (computed 7.7 MB so far)
+2019-07-20 20:08:23 WARN  BlockManager:66 - Persisting block rdd_226_1 to disk instead.
+2019-07-20 20:08:23 WARN  MemoryStore:66 - Not enough space to cache rdd_226_3 in memory! (computed 7.7 MB so far)
+2019-07-20 20:08:23 WARN  BlockManager:66 - Persisting block rdd_226_3 to disk instead.
+2019-07-20 20:08:24 WARN  MemoryStore:66 - Not enough space to cache rdd_226_0 in memory! (computed 11.5 MB so far)
+2019-07-20 20:08:24 WARN  BlockManager:66 - Persisting block rdd_226_0 to disk instead.
+2019-07-20 20:08:24 WARN  MemoryStore:66 - Not enough space to cache rdd_226_4 in memory! (computed 11.5 MB so far)
+2019-07-20 20:08:24 WARN  BlockManager:66 - Persisting block rdd_226_4 to disk instead.
+2019-07-20 20:08:24 WARN  MemoryStore:66 - Not enough space to cache rdd_226_2 in memory! (computed 11.5 MB so far)
+2019-07-20 20:08:24 WARN  BlockManager:66 - Persisting block rdd_226_2 to disk instead.
+2019-07-20 20:08:24 WARN  MemoryStore:66 - Not enough space to cache rdd_226_6 in memory! (computed 11.5 MB so far)
+2019-07-20 20:08:24 WARN  BlockManager:66 - Persisting block rdd_226_6 to disk instead.
+2019-07-20 20:08:24 WARN  MemoryStore:66 - Not enough space to cache rdd_226_5 in memory! (computed 11.5 MB so far)
+2019-07-20 20:08:24 WARN  BlockManager:66 - Persisting block rdd_226_5 to disk instead.
+2019-07-20 20:08:24 WARN  MemoryStore:66 - Not enough space to cache rdd_226_7 in memory! (computed 11.5 MB so far)
+2019-07-20 20:08:24 WARN  BlockManager:66 - Persisting block rdd_226_7 to disk instead.
+2019-07-20 20:09:00 WARN  MemoryStore:66 - Not enough space to cache rdd_226_6 in memory! (computed 41.1 MB so far)
+2019-07-20 20:09:00 WARN  MemoryStore:66 - Not enough space to cache rdd_226_4 in memory! (computed 41.1 MB so far)
+2019-07-20 20:09:00 WARN  MemoryStore:66 - Not enough space to cache rdd_226_5 in memory! (computed 41.1 MB so far)
+2019-07-20 20:09:00 WARN  MemoryStore:66 - Not enough space to cache rdd_226_1 in memory! (computed 41.1 MB so far)
+2019-07-20 20:09:00 WARN  MemoryStore:66 - Not enough space to cache rdd_226_7 in memory! (computed 41.1 MB so far)
+2019-07-20 20:09:01 WARN  MemoryStore:66 - Not enough space to cache rdd_226_3 in memory! (computed 41.1 MB so far)
+2019-07-20 20:09:01 WARN  MemoryStore:66 - Not enough space to cache rdd_226_2 in memory! (computed 41.1 MB so far)
+[Stage 69:>                                                         (0 + 8) / 8]2019-07-20 20:09:33 WARN  MemoryStore:66 - Not enough space to cache rdd_226_7 in memory! (computed 41.1 MB so far)
+2019-07-20 20:09:33 WARN  MemoryStore:66 - Not enough space to cache rdd_226_6 in memory! (computed 41.1 MB so far)
+2019-07-20 20:09:33 WARN  MemoryStore:66 - Not enough space to cache rdd_226_3 in memory! (computed 41.1 MB so far)
+2019-07-20 20:09:33 WARN  MemoryStore:66 - Not enough space to cache rdd_226_5 in memory! (computed 41.1 MB so far)
+2019-07-20 20:09:33 WARN  MemoryStore:66 - Not enough space to cache rdd_226_4 in memory! (computed 41.1 MB so far)
+2019-07-20 20:09:34 WARN  MemoryStore:66 - Not enough space to cache rdd_226_2 in memory! (computed 41.1 MB so far)
+[Stage 71:>                                                         (0 + 8) / 8]2019-07-20 20:10:10 WARN  MemoryStore:66 - Not enough space to cache rdd_226_7 in memory! (computed 41.1 MB so far)
+2019-07-20 20:10:10 WARN  MemoryStore:66 - Not enough space to cache rdd_226_4 in memory! (computed 41.1 MB so far)
+2019-07-20 20:10:10 WARN  MemoryStore:66 - Not enough space to cache rdd_226_3 in memory! (computed 41.1 MB so far)
+2019-07-20 20:10:10 WARN  MemoryStore:66 - Not enough space to cache rdd_226_6 in memory! (computed 41.1 MB so far)
+2019-07-20 20:10:10 WARN  MemoryStore:66 - Not enough space to cache rdd_226_2 in memory! (computed 41.1 MB so far)
+2019-07-20 20:10:10 WARN  MemoryStore:66 - Not enough space to cache rdd_226_5 in memory! (computed 41.1 MB so far)
+[Stage 73:>                                                         (0 + 8) / 8]2019-07-20 20:10:52 WARN  MemoryStore:66 - Not enough space to cache rdd_226_7 in memory! (computed 41.1 MB so far)
+2019-07-20 20:10:52 WARN  MemoryStore:66 - Not enough space to cache rdd_226_3 in memory! (computed 41.1 MB so far)
+2019-07-20 20:10:53 WARN  MemoryStore:66 - Not enough space to cache rdd_226_2 in memory! (computed 41.1 MB so far)
+2019-07-20 20:10:53 WARN  MemoryStore:66 - Not enough space to cache rdd_226_4 in memory! (computed 41.1 MB so far)
+2019-07-20 20:10:53 WARN  MemoryStore:66 - Not enough space to cache rdd_226_6 in memory! (computed 41.1 MB so far)
+2019-07-20 20:10:53 WARN  MemoryStore:66 - Not enough space to cache rdd_226_5 in memory! (computed 41.1 MB so far)
+[Stage 75:>                                                         (0 + 8) / 8]2019-07-20 20:11:36 WARN  MemoryStore:66 - Not enough space to cache rdd_226_4 in memory! (computed 41.1 MB so far)
+2019-07-20 20:11:36 WARN  MemoryStore:66 - Not enough space to cache rdd_226_2 in memory! (computed 41.1 MB so far)
+2019-07-20 20:11:36 WARN  MemoryStore:66 - Not enough space to cache rdd_226_7 in memory! (computed 41.1 MB so far)
+2019-07-20 20:11:36 WARN  MemoryStore:66 - Not enough space to cache rdd_226_6 in memory! (computed 41.1 MB so far)
+2019-07-20 20:11:36 WARN  MemoryStore:66 - Not enough space to cache rdd_226_5 in memory! (computed 41.1 MB so far)
+2019-07-20 20:11:36 WARN  MemoryStore:66 - Not enough space to cache rdd_226_3 in memory! (computed 41.1 MB so far)
+[Stage 77:>                                                         (0 + 8) / 8]2019-07-20 20:12:30 WARN  MemoryStore:66 - Not enough space to cache rdd_226_6 in memory! (computed 41.1 MB so far)
+2019-07-20 20:12:30 WARN  MemoryStore:66 - Not enough space to cache rdd_226_4 in memory! (computed 41.1 MB so far)
+2019-07-20 20:12:30 WARN  MemoryStore:66 - Not enough space to cache rdd_226_7 in memory! (computed 41.1 MB so far)
+2019-07-20 20:12:30 WARN  MemoryStore:66 - Not enough space to cache rdd_226_3 in memory! (computed 41.1 MB so far)
+2019-07-20 20:12:37 WARN  MemoryStore:66 - Not enough space to cache rdd_226_5 in memory! (computed 41.1 MB so far)
+2019-07-20 20:12:37 WARN  MemoryStore:66 - Not enough space to cache rdd_226_2 in memory! (computed 41.1 MB so far)
+[Stage 79:>                                                         (0 + 8) / 8]2019-07-20 20:13:40 WARN  MemoryStore:66 - Not enough space to cache rdd_226_7 in memory! (computed 41.1 MB so far)
+2019-07-20 20:13:40 WARN  MemoryStore:66 - Not enough space to cache rdd_226_4 in memory! (computed 41.1 MB so far)
+2019-07-20 20:13:40 WARN  MemoryStore:66 - Not enough space to cache rdd_226_2 in memory! (computed 41.1 MB so far)
+2019-07-20 20:13:40 WARN  MemoryStore:66 - Not enough space to cache rdd_226_6 in memory! (computed 41.1 MB so far)
+2019-07-20 20:13:40 WARN  MemoryStore:66 - Not enough space to cache rdd_226_3 in memory! (computed 41.1 MB so far)
+2019-07-20 20:13:40 WARN  MemoryStore:66 - Not enough space to cache rdd_226_5 in memory! (computed 41.1 MB so far)
+[Stage 81:>                                                         (0 + 8) / 8]2019-07-20 20:14:54 WARN  MemoryStore:66 - Not enough space to cache rdd_226_6 in memory! (computed 41.1 MB so far)
+2019-07-20 20:14:54 WARN  MemoryStore:66 - Not enough space to cache rdd_226_2 in memory! (computed 41.1 MB so far)
+2019-07-20 20:14:54 WARN  MemoryStore:66 - Not enough space to cache rdd_226_7 in memory! (computed 41.1 MB so far)
+2019-07-20 20:14:54 WARN  MemoryStore:66 - Not enough space to cache rdd_226_3 in memory! (computed 41.1 MB so far)
+2019-07-20 20:14:55 WARN  MemoryStore:66 - Not enough space to cache rdd_226_5 in memory! (computed 41.1 MB so far)
+2019-07-20 20:14:55 WARN  MemoryStore:66 - Not enough space to cache rdd_226_4 in memory! (computed 41.1 MB so far)
+[Stage 83:>                                                         (0 + 8) / 8]2019-07-20 20:16:19 WARN  MemoryStore:66 - Not enough space to cache rdd_226_2 in memory! (computed 41.1 MB so far)
+2019-07-20 20:16:19 WARN  MemoryStore:66 - Not enough space to cache rdd_226_6 in memory! (computed 41.1 MB so far)
+2019-07-20 20:16:19 WARN  MemoryStore:66 - Not enough space to cache rdd_226_3 in memory! (computed 41.1 MB so far)
+2019-07-20 20:16:19 WARN  MemoryStore:66 - Not enough space to cache rdd_226_4 in memory! (computed 41.1 MB so far)
+2019-07-20 20:16:19 WARN  MemoryStore:66 - Not enough space to cache rdd_226_5 in memory! (computed 41.1 MB so far)
+2019-07-20 20:16:19 WARN  MemoryStore:66 - Not enough space to cache rdd_226_7 in memory! (computed 41.1 MB so far)
+[Stage 85:>                                                         (0 + 8) / 8]2019-07-20 20:17:53 WARN  MemoryStore:66 - Not enough space to cache rdd_226_4 in memory! (computed 41.1 MB so far)
+2019-07-20 20:17:53 WARN  MemoryStore:66 - Not enough space to cache rdd_226_7 in memory! (computed 41.1 MB so far)
+2019-07-20 20:17:53 WARN  MemoryStore:66 - Not enough space to cache rdd_226_5 in memory! (computed 41.1 MB so far)
+2019-07-20 20:17:54 WARN  MemoryStore:66 - Not enough space to cache rdd_226_3 in memory! (computed 41.1 MB so far)
+2019-07-20 20:17:54 WARN  MemoryStore:66 - Not enough space to cache rdd_226_2 in memory! (computed 41.1 MB so far)
+2019-07-20 20:17:54 WARN  MemoryStore:66 - Not enough space to cache rdd_226_6 in memory! (computed 41.1 MB so far)
+[Stage 91:=======>                                                  (1 + 7) / 8]2019-07-20 20:29:47 WARN  MemoryStore:66 - Not enough space to cache rdd_271_7 in memory! (computed 20.0 MB so far)
+2019-07-20 20:29:47 WARN  BlockManager:66 - Persisting block rdd_271_7 to disk instead.
+[Stage 92:>                                                         (0 + 8) / 8]2019-07-20 20:30:03 WARN  MemoryStore:66 - Not enough space to cache rdd_288_6 in memory! (computed 7.7 MB so far)
+2019-07-20 20:30:03 WARN  BlockManager:66 - Persisting block rdd_288_6 to disk instead.
+2019-07-20 20:30:03 WARN  MemoryStore:66 - Not enough space to cache rdd_288_1 in memory! (computed 7.7 MB so far)
+2019-07-20 20:30:03 WARN  BlockManager:66 - Persisting block rdd_288_1 to disk instead.
+2019-07-20 20:30:04 WARN  MemoryStore:66 - Not enough space to cache rdd_288_0 in memory! (computed 11.5 MB so far)
+2019-07-20 20:30:04 WARN  BlockManager:66 - Persisting block rdd_288_0 to disk instead.
+2019-07-20 20:30:04 WARN  MemoryStore:66 - Not enough space to cache rdd_288_5 in memory! (computed 11.5 MB so far)
+2019-07-20 20:30:04 WARN  BlockManager:66 - Persisting block rdd_288_5 to disk instead.
+2019-07-20 20:30:04 WARN  MemoryStore:66 - Not enough space to cache rdd_288_7 in memory! (computed 11.5 MB so far)
+2019-07-20 20:30:04 WARN  BlockManager:66 - Persisting block rdd_288_7 to disk instead.
+2019-07-20 20:30:04 WARN  MemoryStore:66 - Not enough space to cache rdd_288_3 in memory! (computed 11.5 MB so far)
+2019-07-20 20:30:04 WARN  BlockManager:66 - Persisting block rdd_288_3 to disk instead.
+2019-07-20 20:30:04 WARN  MemoryStore:66 - Not enough space to cache rdd_288_4 in memory! (computed 11.5 MB so far)
+2019-07-20 20:30:04 WARN  BlockManager:66 - Persisting block rdd_288_4 to disk instead.
+2019-07-20 20:30:04 WARN  MemoryStore:66 - Not enough space to cache rdd_288_2 in memory! (computed 11.5 MB so far)
+2019-07-20 20:30:04 WARN  BlockManager:66 - Persisting block rdd_288_2 to disk instead.
+2019-07-20 20:30:31 WARN  MemoryStore:66 - Not enough space to cache rdd_288_3 in memory! (computed 41.1 MB so far)
+2019-07-20 20:30:32 WARN  MemoryStore:66 - Not enough space to cache rdd_288_6 in memory! (computed 41.1 MB so far)
+2019-07-20 20:30:36 WARN  MemoryStore:66 - Not enough space to cache rdd_288_1 in memory! (computed 41.1 MB so far)
+2019-07-20 20:30:36 WARN  MemoryStore:66 - Not enough space to cache rdd_288_7 in memory! (computed 41.1 MB so far)
+2019-07-20 20:30:37 WARN  MemoryStore:66 - Not enough space to cache rdd_288_5 in memory! (computed 41.1 MB so far)
+2019-07-20 20:30:37 WARN  MemoryStore:66 - Not enough space to cache rdd_288_2 in memory! (computed 41.1 MB so far)
+2019-07-20 20:30:37 WARN  MemoryStore:66 - Not enough space to cache rdd_288_4 in memory! (computed 41.1 MB so far)
+[Stage 94:>                                                         (0 + 8) / 8]2019-07-20 20:31:07 WARN  MemoryStore:66 - Not enough space to cache rdd_288_2 in memory! (computed 41.1 MB so far)
+2019-07-20 20:31:07 WARN  MemoryStore:66 - Not enough space to cache rdd_288_1 in memory! (computed 41.1 MB so far)
+2019-07-20 20:31:07 WARN  MemoryStore:66 - Not enough space to cache rdd_288_5 in memory! (computed 41.1 MB so far)
+2019-07-20 20:31:07 WARN  MemoryStore:66 - Not enough space to cache rdd_288_7 in memory! (computed 41.1 MB so far)
+2019-07-20 20:31:07 WARN  MemoryStore:66 - Not enough space to cache rdd_288_4 in memory! (computed 41.1 MB so far)
+2019-07-20 20:31:08 WARN  MemoryStore:66 - Not enough space to cache rdd_288_3 in memory! (computed 41.1 MB so far)
+[Stage 96:>                                                         (0 + 8) / 8]2019-07-20 20:31:45 WARN  MemoryStore:66 - Not enough space to cache rdd_288_1 in memory! (computed 41.1 MB so far)
+2019-07-20 20:31:45 WARN  MemoryStore:66 - Not enough space to cache rdd_288_3 in memory! (computed 41.1 MB so far)
+2019-07-20 20:31:45 WARN  MemoryStore:66 - Not enough space to cache rdd_288_4 in memory! (computed 41.1 MB so far)
+2019-07-20 20:31:45 WARN  MemoryStore:66 - Not enough space to cache rdd_288_2 in memory! (computed 41.1 MB so far)
+2019-07-20 20:31:45 WARN  MemoryStore:66 - Not enough space to cache rdd_288_7 in memory! (computed 41.1 MB so far)
+2019-07-20 20:31:45 WARN  MemoryStore:66 - Not enough space to cache rdd_288_5 in memory! (computed 41.1 MB so far)
+[Stage 98:>                                                         (0 + 8) / 8]2019-07-20 20:32:25 WARN  MemoryStore:66 - Not enough space to cache rdd_288_7 in memory! (computed 41.1 MB so far)
+2019-07-20 20:32:26 WARN  MemoryStore:66 - Not enough space to cache rdd_288_5 in memory! (computed 41.1 MB so far)
+2019-07-20 20:32:26 WARN  MemoryStore:66 - Not enough space to cache rdd_288_1 in memory! (computed 41.1 MB so far)
+2019-07-20 20:32:26 WARN  MemoryStore:66 - Not enough space to cache rdd_288_2 in memory! (computed 41.1 MB so far)
+2019-07-20 20:32:26 WARN  MemoryStore:66 - Not enough space to cache rdd_288_4 in memory! (computed 41.1 MB so far)
+2019-07-20 20:32:26 WARN  MemoryStore:66 - Not enough space to cache rdd_288_3 in memory! (computed 41.1 MB so far)
+[Stage 100:>                                                        (0 + 8) / 8]2019-07-20 20:33:15 WARN  MemoryStore:66 - Not enough space to cache rdd_288_4 in memory! (computed 41.1 MB so far)
+2019-07-20 20:33:15 WARN  MemoryStore:66 - Not enough space to cache rdd_288_7 in memory! (computed 41.1 MB so far)
+2019-07-20 20:33:15 WARN  MemoryStore:66 - Not enough space to cache rdd_288_2 in memory! (computed 41.1 MB so far)
+2019-07-20 20:33:15 WARN  MemoryStore:66 - Not enough space to cache rdd_288_5 in memory! (computed 41.1 MB so far)
+2019-07-20 20:33:15 WARN  MemoryStore:66 - Not enough space to cache rdd_288_1 in memory! (computed 41.1 MB so far)
+2019-07-20 20:33:15 WARN  MemoryStore:66 - Not enough space to cache rdd_288_3 in memory! (computed 41.1 MB so far)
+[Stage 102:>                                                        (0 + 8) / 8]2019-07-20 20:34:12 WARN  MemoryStore:66 - Not enough space to cache rdd_288_7 in memory! (computed 41.1 MB so far)
+2019-07-20 20:34:12 WARN  MemoryStore:66 - Not enough space to cache rdd_288_4 in memory! (computed 41.1 MB so far)
+2019-07-20 20:34:12 WARN  MemoryStore:66 - Not enough space to cache rdd_288_1 in memory! (computed 41.1 MB so far)
+2019-07-20 20:34:13 WARN  MemoryStore:66 - Not enough space to cache rdd_288_3 in memory! (computed 41.1 MB so far)
+2019-07-20 20:34:13 WARN  MemoryStore:66 - Not enough space to cache rdd_288_5 in memory! (computed 41.1 MB so far)
+2019-07-20 20:34:13 WARN  MemoryStore:66 - Not enough space to cache rdd_288_2 in memory! (computed 41.1 MB so far)
+[Stage 104:>                                                        (0 + 8) / 8]2019-07-20 20:35:12 WARN  MemoryStore:66 - Not enough space to cache rdd_288_5 in memory! (computed 41.1 MB so far)
+2019-07-20 20:35:12 WARN  MemoryStore:66 - Not enough space to cache rdd_288_4 in memory! (computed 41.1 MB so far)
+2019-07-20 20:35:12 WARN  MemoryStore:66 - Not enough space to cache rdd_288_2 in memory! (computed 41.1 MB so far)
+2019-07-20 20:35:12 WARN  MemoryStore:66 - Not enough space to cache rdd_288_1 in memory! (computed 41.1 MB so far)
+2019-07-20 20:35:13 WARN  MemoryStore:66 - Not enough space to cache rdd_288_3 in memory! (computed 41.1 MB so far)
+2019-07-20 20:35:21 WARN  MemoryStore:66 - Not enough space to cache rdd_288_7 in memory! (computed 41.1 MB so far)
+[Stage 106:>                                                        (0 + 8) / 8]2019-07-20 20:36:32 WARN  MemoryStore:66 - Not enough space to cache rdd_288_4 in memory! (computed 41.1 MB so far)
+2019-07-20 20:36:32 WARN  MemoryStore:66 - Not enough space to cache rdd_288_2 in memory! (computed 41.1 MB so far)
+2019-07-20 20:36:32 WARN  MemoryStore:66 - Not enough space to cache rdd_288_5 in memory! (computed 41.1 MB so far)
+2019-07-20 20:36:32 WARN  MemoryStore:66 - Not enough space to cache rdd_288_7 in memory! (computed 41.1 MB so far)
+2019-07-20 20:36:33 WARN  MemoryStore:66 - Not enough space to cache rdd_288_3 in memory! (computed 41.1 MB so far)
+2019-07-20 20:36:33 WARN  MemoryStore:66 - Not enough space to cache rdd_288_1 in memory! (computed 41.1 MB so far)
+[Stage 108:>                                                        (0 + 8) / 8]2019-07-20 20:38:04 WARN  MemoryStore:66 - Not enough space to cache rdd_288_3 in memory! (computed 41.1 MB so far)
+2019-07-20 20:38:04 WARN  MemoryStore:66 - Not enough space to cache rdd_288_2 in memory! (computed 41.1 MB so far)
+2019-07-20 20:38:04 WARN  MemoryStore:66 - Not enough space to cache rdd_288_1 in memory! (computed 41.1 MB so far)
+2019-07-20 20:38:04 WARN  MemoryStore:66 - Not enough space to cache rdd_288_7 in memory! (computed 41.1 MB so far)
+2019-07-20 20:38:04 WARN  MemoryStore:66 - Not enough space to cache rdd_288_5 in memory! (computed 41.1 MB so far)
+2019-07-20 20:38:04 WARN  MemoryStore:66 - Not enough space to cache rdd_288_4 in memory! (computed 41.1 MB so far)
+[Stage 110:>                                                        (0 + 8) / 8]2019-07-20 20:39:38 WARN  MemoryStore:66 - Not enough space to cache rdd_288_5 in memory! (computed 41.1 MB so far)
+2019-07-20 20:39:38 WARN  MemoryStore:66 - Not enough space to cache rdd_288_7 in memory! (computed 41.1 MB so far)
+2019-07-20 20:39:38 WARN  MemoryStore:66 - Not enough space to cache rdd_288_4 in memory! (computed 41.1 MB so far)
+2019-07-20 20:39:38 WARN  MemoryStore:66 - Not enough space to cache rdd_288_3 in memory! (computed 41.1 MB so far)
+2019-07-20 20:39:38 WARN  MemoryStore:66 - Not enough space to cache rdd_288_1 in memory! (computed 41.1 MB so far)
+2019-07-20 20:39:39 WARN  MemoryStore:66 - Not enough space to cache rdd_288_2 in memory! (computed 41.1 MB so far)
+[Stage 116:=======>                                                 (1 + 7) / 8]2019-07-20 20:51:17 WARN  MemoryStore:66 - Not enough space to cache rdd_333_2 in memory! (computed 20.0 MB so far)
+2019-07-20 20:51:17 WARN  BlockManager:66 - Persisting block rdd_333_2 to disk instead.
+2019-07-20 20:51:17 WARN  MemoryStore:66 - Not enough space to cache rdd_333_6 in memory! (computed 20.0 MB so far)
+2019-07-20 20:51:17 WARN  BlockManager:66 - Persisting block rdd_333_6 to disk instead.
+2019-07-20 20:51:18 WARN  MemoryStore:66 - Not enough space to cache rdd_333_3 in memory! (computed 20.0 MB so far)
+2019-07-20 20:51:18 WARN  BlockManager:66 - Persisting block rdd_333_3 to disk instead.
+[Stage 117:>                                                        (0 + 8) / 8]2019-07-20 20:51:35 WARN  MemoryStore:66 - Not enough space to cache rdd_350_0 in memory! (computed 7.7 MB so far)
+2019-07-20 20:51:35 WARN  BlockManager:66 - Persisting block rdd_350_0 to disk instead.
+2019-07-20 20:51:35 WARN  MemoryStore:66 - Not enough space to cache rdd_350_6 in memory! (computed 7.7 MB so far)
+2019-07-20 20:51:35 WARN  BlockManager:66 - Persisting block rdd_350_6 to disk instead.
+2019-07-20 20:51:35 WARN  MemoryStore:66 - Not enough space to cache rdd_350_5 in memory! (computed 11.5 MB so far)
+2019-07-20 20:51:35 WARN  BlockManager:66 - Persisting block rdd_350_5 to disk instead.
+2019-07-20 20:51:35 WARN  MemoryStore:66 - Not enough space to cache rdd_350_1 in memory! (computed 11.5 MB so far)
+2019-07-20 20:51:35 WARN  BlockManager:66 - Persisting block rdd_350_1 to disk instead.
+2019-07-20 20:51:36 WARN  MemoryStore:66 - Not enough space to cache rdd_350_2 in memory! (computed 11.5 MB so far)
+2019-07-20 20:51:36 WARN  BlockManager:66 - Persisting block rdd_350_2 to disk instead.
+2019-07-20 20:51:36 WARN  MemoryStore:66 - Not enough space to cache rdd_350_4 in memory! (computed 11.5 MB so far)
+2019-07-20 20:51:36 WARN  BlockManager:66 - Persisting block rdd_350_4 to disk instead.
+2019-07-20 20:51:36 WARN  MemoryStore:66 - Not enough space to cache rdd_350_7 in memory! (computed 11.5 MB so far)
+2019-07-20 20:51:36 WARN  BlockManager:66 - Persisting block rdd_350_7 to disk instead.
+2019-07-20 20:51:36 WARN  MemoryStore:66 - Not enough space to cache rdd_350_3 in memory! (computed 11.5 MB so far)
+2019-07-20 20:51:36 WARN  BlockManager:66 - Persisting block rdd_350_3 to disk instead.
+2019-07-20 20:52:12 WARN  MemoryStore:66 - Not enough space to cache rdd_350_7 in memory! (computed 27.4 MB so far)
+2019-07-20 20:52:13 WARN  MemoryStore:66 - Not enough space to cache rdd_350_2 in memory! (computed 41.1 MB so far)
+2019-07-20 20:52:13 WARN  MemoryStore:66 - Not enough space to cache rdd_350_6 in memory! (computed 41.1 MB so far)
+2019-07-20 20:52:14 WARN  MemoryStore:66 - Not enough space to cache rdd_350_0 in memory! (computed 41.1 MB so far)
+2019-07-20 20:52:15 WARN  MemoryStore:66 - Not enough space to cache rdd_350_1 in memory! (computed 41.1 MB so far)
+2019-07-20 20:52:15 WARN  MemoryStore:66 - Not enough space to cache rdd_350_3 in memory! (computed 41.1 MB so far)
+[Stage 119:>                                                        (0 + 8) / 8]2019-07-20 20:52:49 WARN  MemoryStore:66 - Not enough space to cache rdd_350_2 in memory! (computed 41.1 MB so far)
+2019-07-20 20:52:49 WARN  MemoryStore:66 - Not enough space to cache rdd_350_0 in memory! (computed 41.1 MB so far)
+2019-07-20 20:52:49 WARN  MemoryStore:66 - Not enough space to cache rdd_350_3 in memory! (computed 41.1 MB so far)
+2019-07-20 20:52:49 WARN  MemoryStore:66 - Not enough space to cache rdd_350_6 in memory! (computed 41.1 MB so far)
+2019-07-20 20:52:49 WARN  MemoryStore:66 - Not enough space to cache rdd_350_7 in memory! (computed 41.1 MB so far)
+2019-07-20 20:52:49 WARN  MemoryStore:66 - Not enough space to cache rdd_350_1 in memory! (computed 41.1 MB so far)
+[Stage 121:>                                                        (0 + 8) / 8]2019-07-20 20:53:24 WARN  MemoryStore:66 - Not enough space to cache rdd_350_2 in memory! (computed 41.1 MB so far)
+2019-07-20 20:53:25 WARN  MemoryStore:66 - Not enough space to cache rdd_350_0 in memory! (computed 41.1 MB so far)
+2019-07-20 20:53:25 WARN  MemoryStore:66 - Not enough space to cache rdd_350_1 in memory! (computed 41.1 MB so far)
+2019-07-20 20:53:25 WARN  MemoryStore:66 - Not enough space to cache rdd_350_6 in memory! (computed 41.1 MB so far)
+2019-07-20 20:53:25 WARN  MemoryStore:66 - Not enough space to cache rdd_350_3 in memory! (computed 41.1 MB so far)
+2019-07-20 20:53:25 WARN  MemoryStore:66 - Not enough space to cache rdd_350_7 in memory! (computed 41.1 MB so far)
+[Stage 123:>                                                        (0 + 8) / 8]2019-07-20 20:54:00 WARN  MemoryStore:66 - Not enough space to cache rdd_350_0 in memory! (computed 41.1 MB so far)
+2019-07-20 20:54:00 WARN  MemoryStore:66 - Not enough space to cache rdd_350_6 in memory! (computed 41.1 MB so far)
+2019-07-20 20:54:00 WARN  MemoryStore:66 - Not enough space to cache rdd_350_3 in memory! (computed 41.1 MB so far)
+2019-07-20 20:54:07 WARN  MemoryStore:66 - Not enough space to cache rdd_350_2 in memory! (computed 41.1 MB so far)
+2019-07-20 20:54:08 WARN  MemoryStore:66 - Not enough space to cache rdd_350_7 in memory! (computed 41.1 MB so far)
+2019-07-20 20:54:08 WARN  MemoryStore:66 - Not enough space to cache rdd_350_1 in memory! (computed 41.1 MB so far)
+[Stage 125:>                                                        (0 + 8) / 8]2019-07-20 20:54:50 WARN  MemoryStore:66 - Not enough space to cache rdd_350_3 in memory! (computed 41.1 MB so far)
+2019-07-20 20:54:50 WARN  MemoryStore:66 - Not enough space to cache rdd_350_0 in memory! (computed 41.1 MB so far)
+2019-07-20 20:54:50 WARN  MemoryStore:66 - Not enough space to cache rdd_350_1 in memory! (computed 41.1 MB so far)
+2019-07-20 20:54:50 WARN  MemoryStore:66 - Not enough space to cache rdd_350_2 in memory! (computed 41.1 MB so far)
+2019-07-20 20:54:50 WARN  MemoryStore:66 - Not enough space to cache rdd_350_6 in memory! (computed 41.1 MB so far)
+2019-07-20 20:54:57 WARN  MemoryStore:66 - Not enough space to cache rdd_350_7 in memory! (computed 41.1 MB so far)
+[Stage 127:>                                                        (0 + 8) / 8]2019-07-20 20:55:54 WARN  MemoryStore:66 - Not enough space to cache rdd_350_7 in memory! (computed 41.1 MB so far)
+2019-07-20 20:55:54 WARN  MemoryStore:66 - Not enough space to cache rdd_350_0 in memory! (computed 41.1 MB so far)
+2019-07-20 20:55:55 WARN  MemoryStore:66 - Not enough space to cache rdd_350_1 in memory! (computed 41.1 MB so far)
+2019-07-20 20:56:00 WARN  MemoryStore:66 - Not enough space to cache rdd_350_2 in memory! (computed 41.1 MB so far)
+2019-07-20 20:56:00 WARN  MemoryStore:66 - Not enough space to cache rdd_350_3 in memory! (computed 41.1 MB so far)
+2019-07-20 20:56:01 WARN  MemoryStore:66 - Not enough space to cache rdd_350_6 in memory! (computed 41.1 MB so far)
+[Stage 129:>                                                        (0 + 8) / 8]2019-07-20 20:56:58 WARN  MemoryStore:66 - Not enough space to cache rdd_350_2 in memory! (computed 41.1 MB so far)
+2019-07-20 20:56:59 WARN  MemoryStore:66 - Not enough space to cache rdd_350_0 in memory! (computed 41.1 MB so far)
+2019-07-20 20:57:00 WARN  MemoryStore:66 - Not enough space to cache rdd_350_3 in memory! (computed 41.1 MB so far)
+2019-07-20 20:57:00 WARN  MemoryStore:66 - Not enough space to cache rdd_350_6 in memory! (computed 41.1 MB so far)
+2019-07-20 20:57:00 WARN  MemoryStore:66 - Not enough space to cache rdd_350_1 in memory! (computed 41.1 MB so far)
+2019-07-20 20:57:00 WARN  MemoryStore:66 - Not enough space to cache rdd_350_7 in memory! (computed 41.1 MB so far)
+[Stage 131:>                                                        (0 + 8) / 8]2019-07-20 20:57:57 WARN  MemoryStore:66 - Not enough space to cache rdd_350_2 in memory! (computed 41.1 MB so far)
+2019-07-20 20:57:57 WARN  MemoryStore:66 - Not enough space to cache rdd_350_3 in memory! (computed 41.1 MB so far)
+2019-07-20 20:57:57 WARN  MemoryStore:66 - Not enough space to cache rdd_350_0 in memory! (computed 41.1 MB so far)
+2019-07-20 20:57:57 WARN  MemoryStore:66 - Not enough space to cache rdd_350_1 in memory! (computed 41.1 MB so far)
+2019-07-20 20:57:57 WARN  MemoryStore:66 - Not enough space to cache rdd_350_6 in memory! (computed 41.1 MB so far)
+2019-07-20 20:57:57 WARN  MemoryStore:66 - Not enough space to cache rdd_350_7 in memory! (computed 41.1 MB so far)
+[Stage 133:>                                                        (0 + 8) / 8]2019-07-20 20:59:20 WARN  MemoryStore:66 - Not enough space to cache rdd_350_7 in memory! (computed 41.1 MB so far)
+2019-07-20 20:59:20 WARN  MemoryStore:66 - Not enough space to cache rdd_350_0 in memory! (computed 41.1 MB so far)
+2019-07-20 20:59:20 WARN  MemoryStore:66 - Not enough space to cache rdd_350_6 in memory! (computed 41.1 MB so far)
+2019-07-20 20:59:20 WARN  MemoryStore:66 - Not enough space to cache rdd_350_1 in memory! (computed 41.1 MB so far)
+2019-07-20 20:59:20 WARN  MemoryStore:66 - Not enough space to cache rdd_350_2 in memory! (computed 41.1 MB so far)
+2019-07-20 20:59:20 WARN  MemoryStore:66 - Not enough space to cache rdd_350_3 in memory! (computed 41.1 MB so far)
+[Stage 135:>                                                        (0 + 8) / 8]2019-07-20 21:00:54 WARN  MemoryStore:66 - Not enough space to cache rdd_350_2 in memory! (computed 41.1 MB so far)
+2019-07-20 21:00:54 WARN  MemoryStore:66 - Not enough space to cache rdd_350_0 in memory! (computed 41.1 MB so far)
+2019-07-20 21:00:55 WARN  MemoryStore:66 - Not enough space to cache rdd_350_1 in memory! (computed 41.1 MB so far)
+2019-07-20 21:00:55 WARN  MemoryStore:66 - Not enough space to cache rdd_350_7 in memory! (computed 41.1 MB so far)
+2019-07-20 21:00:55 WARN  MemoryStore:66 - Not enough space to cache rdd_350_3 in memory! (computed 41.1 MB so far)
+2019-07-20 21:00:55 WARN  MemoryStore:66 - Not enough space to cache rdd_350_6 in memory! (computed 41.1 MB so far)
+[Stage 142:>                                                        (0 + 8) / 8]2019-07-20 21:15:39 WARN  MemoryStore:66 - Not enough space to cache rdd_405_7 in memory! (computed 5.1 MB so far)
+2019-07-20 21:15:42 WARN  BlockManager:66 - Persisting block rdd_405_7 to disk instead.
+2019-07-20 21:15:42 WARN  MemoryStore:66 - Not enough space to cache rdd_405_6 in memory! (computed 7.7 MB so far)
+2019-07-20 21:15:42 WARN  BlockManager:66 - Persisting block rdd_405_6 to disk instead.
+2019-07-20 21:15:42 WARN  MemoryStore:66 - Not enough space to cache rdd_405_1 in memory! (computed 11.5 MB so far)
+2019-07-20 21:15:42 WARN  BlockManager:66 - Persisting block rdd_405_1 to disk instead.
+2019-07-20 21:15:42 WARN  MemoryStore:66 - Not enough space to cache rdd_405_5 in memory! (computed 11.5 MB so far)
+2019-07-20 21:15:42 WARN  BlockManager:66 - Persisting block rdd_405_5 to disk instead.
+2019-07-20 21:15:42 WARN  MemoryStore:66 - Not enough space to cache rdd_405_4 in memory! (computed 11.5 MB so far)
+2019-07-20 21:15:42 WARN  BlockManager:66 - Persisting block rdd_405_4 to disk instead.
+2019-07-20 21:15:43 WARN  MemoryStore:66 - Not enough space to cache rdd_405_3 in memory! (computed 11.5 MB so far)
+2019-07-20 21:15:43 WARN  BlockManager:66 - Persisting block rdd_405_3 to disk instead.
+2019-07-20 21:15:43 WARN  MemoryStore:66 - Not enough space to cache rdd_405_0 in memory! (computed 17.8 MB so far)
+2019-07-20 21:15:43 WARN  BlockManager:66 - Persisting block rdd_405_0 to disk instead.
+[Stage 142:=======>                                                 (1 + 7) / 8]2019-07-20 21:16:30 WARN  MemoryStore:66 - Not enough space to cache rdd_405_0 in memory! (computed 41.1 MB so far)
+2019-07-20 21:16:31 WARN  MemoryStore:66 - Not enough space to cache rdd_405_1 in memory! (computed 41.1 MB so far)
+2019-07-20 21:16:31 WARN  MemoryStore:66 - Not enough space to cache rdd_405_3 in memory! (computed 41.1 MB so far)
+2019-07-20 21:16:31 WARN  MemoryStore:66 - Not enough space to cache rdd_405_5 in memory! (computed 41.1 MB so far)
+2019-07-20 21:16:31 WARN  MemoryStore:66 - Not enough space to cache rdd_405_4 in memory! (computed 41.1 MB so far)
+2019-07-20 21:16:34 WARN  MemoryStore:66 - Not enough space to cache rdd_405_7 in memory! (computed 41.1 MB so far)
+2019-07-20 21:16:34 WARN  MemoryStore:66 - Not enough space to cache rdd_405_6 in memory! (computed 41.1 MB so far)
+[Stage 144:>                                                        (0 + 8) / 8]2019-07-20 21:17:08 WARN  MemoryStore:66 - Not enough space to cache rdd_405_3 in memory! (computed 41.1 MB so far)
+2019-07-20 21:17:08 WARN  MemoryStore:66 - Not enough space to cache rdd_405_7 in memory! (computed 41.1 MB so far)
+2019-07-20 21:17:08 WARN  MemoryStore:66 - Not enough space to cache rdd_405_5 in memory! (computed 41.1 MB so far)
+2019-07-20 21:17:08 WARN  MemoryStore:66 - Not enough space to cache rdd_405_0 in memory! (computed 41.1 MB so far)
+2019-07-20 21:17:08 WARN  MemoryStore:66 - Not enough space to cache rdd_405_1 in memory! (computed 41.1 MB so far)
+2019-07-20 21:17:08 WARN  MemoryStore:66 - Not enough space to cache rdd_405_6 in memory! (computed 41.1 MB so far)
+2019-07-20 21:17:09 WARN  MemoryStore:66 - Not enough space to cache rdd_405_4 in memory! (computed 41.1 MB so far)
+[Stage 146:>                                                        (0 + 8) / 8]2019-07-20 21:17:53 WARN  MemoryStore:66 - Not enough space to cache rdd_405_4 in memory! (computed 41.1 MB so far)
+2019-07-20 21:17:53 WARN  MemoryStore:66 - Not enough space to cache rdd_405_1 in memory! (computed 41.1 MB so far)
+2019-07-20 21:17:53 WARN  MemoryStore:66 - Not enough space to cache rdd_405_0 in memory! (computed 41.1 MB so far)
+2019-07-20 21:17:53 WARN  MemoryStore:66 - Not enough space to cache rdd_405_3 in memory! (computed 41.1 MB so far)
+2019-07-20 21:17:53 WARN  MemoryStore:66 - Not enough space to cache rdd_405_6 in memory! (computed 41.1 MB so far)
+2019-07-20 21:17:53 WARN  MemoryStore:66 - Not enough space to cache rdd_405_7 in memory! (computed 41.1 MB so far)
+2019-07-20 21:17:53 WARN  MemoryStore:66 - Not enough space to cache rdd_405_5 in memory! (computed 41.1 MB so far)
+[Stage 148:>                                                        (0 + 8) / 8]2019-07-20 21:18:47 WARN  MemoryStore:66 - Not enough space to cache rdd_405_7 in memory! (computed 41.1 MB so far)
+2019-07-20 21:18:47 WARN  MemoryStore:66 - Not enough space to cache rdd_405_3 in memory! (computed 41.1 MB so far)
+2019-07-20 21:18:47 WARN  MemoryStore:66 - Not enough space to cache rdd_405_1 in memory! (computed 41.1 MB so far)
+2019-07-20 21:18:47 WARN  MemoryStore:66 - Not enough space to cache rdd_405_0 in memory! (computed 41.1 MB so far)
+2019-07-20 21:18:47 WARN  MemoryStore:66 - Not enough space to cache rdd_405_4 in memory! (computed 41.1 MB so far)
+2019-07-20 21:18:47 WARN  MemoryStore:66 - Not enough space to cache rdd_405_6 in memory! (computed 41.1 MB so far)
+2019-07-20 21:18:48 WARN  MemoryStore:66 - Not enough space to cache rdd_405_5 in memory! (computed 41.1 MB so far)
+[Stage 150:>                                                        (0 + 8) / 8]2019-07-20 21:19:54 WARN  MemoryStore:66 - Not enough space to cache rdd_405_3 in memory! (computed 41.1 MB so far)
+2019-07-20 21:19:54 WARN  MemoryStore:66 - Not enough space to cache rdd_405_5 in memory! (computed 41.1 MB so far)
+2019-07-20 21:19:54 WARN  MemoryStore:66 - Not enough space to cache rdd_405_1 in memory! (computed 41.1 MB so far)
+2019-07-20 21:19:54 WARN  MemoryStore:66 - Not enough space to cache rdd_405_6 in memory! (computed 41.1 MB so far)
+2019-07-20 21:19:54 WARN  MemoryStore:66 - Not enough space to cache rdd_405_4 in memory! (computed 41.1 MB so far)
+2019-07-20 21:19:54 WARN  MemoryStore:66 - Not enough space to cache rdd_405_0 in memory! (computed 41.1 MB so far)
+2019-07-20 21:19:55 WARN  MemoryStore:66 - Not enough space to cache rdd_405_7 in memory! (computed 41.1 MB so far)
+[Stage 152:>                                                        (0 + 8) / 8]2019-07-20 21:21:06 WARN  MemoryStore:66 - Not enough space to cache rdd_405_6 in memory! (computed 41.1 MB so far)
+2019-07-20 21:21:07 WARN  MemoryStore:66 - Not enough space to cache rdd_405_5 in memory! (computed 41.1 MB so far)
+2019-07-20 21:21:07 WARN  MemoryStore:66 - Not enough space to cache rdd_405_1 in memory! (computed 41.1 MB so far)
+2019-07-20 21:21:07 WARN  MemoryStore:66 - Not enough space to cache rdd_405_7 in memory! (computed 41.1 MB so far)
+2019-07-20 21:21:07 WARN  MemoryStore:66 - Not enough space to cache rdd_405_0 in memory! (computed 41.1 MB so far)
+2019-07-20 21:21:07 WARN  MemoryStore:66 - Not enough space to cache rdd_405_3 in memory! (computed 41.1 MB so far)
+2019-07-20 21:21:07 WARN  MemoryStore:66 - Not enough space to cache rdd_405_4 in memory! (computed 41.1 MB so far)
+[Stage 154:>                                                        (0 + 8) / 8]2019-07-20 21:22:31 WARN  MemoryStore:66 - Not enough space to cache rdd_405_4 in memory! (computed 41.1 MB so far)
+2019-07-20 21:22:31 WARN  MemoryStore:66 - Not enough space to cache rdd_405_1 in memory! (computed 41.1 MB so far)
+2019-07-20 21:22:31 WARN  MemoryStore:66 - Not enough space to cache rdd_405_0 in memory! (computed 41.1 MB so far)
+2019-07-20 21:22:31 WARN  MemoryStore:66 - Not enough space to cache rdd_405_3 in memory! (computed 41.1 MB so far)
+2019-07-20 21:22:31 WARN  MemoryStore:66 - Not enough space to cache rdd_405_7 in memory! (computed 41.1 MB so far)
+2019-07-20 21:22:32 WARN  MemoryStore:66 - Not enough space to cache rdd_405_6 in memory! (computed 41.1 MB so far)
+2019-07-20 21:22:32 WARN  MemoryStore:66 - Not enough space to cache rdd_405_5 in memory! (computed 41.1 MB so far)
+[Stage 156:>                                                        (0 + 8) / 8]2019-07-20 21:24:11 WARN  MemoryStore:66 - Not enough space to cache rdd_405_3 in memory! (computed 41.1 MB so far)
+2019-07-20 21:24:11 WARN  MemoryStore:66 - Not enough space to cache rdd_405_6 in memory! (computed 41.1 MB so far)
+2019-07-20 21:24:11 WARN  MemoryStore:66 - Not enough space to cache rdd_405_1 in memory! (computed 41.1 MB so far)
+2019-07-20 21:24:11 WARN  MemoryStore:66 - Not enough space to cache rdd_405_5 in memory! (computed 41.1 MB so far)
+2019-07-20 21:24:12 WARN  MemoryStore:66 - Not enough space to cache rdd_405_7 in memory! (computed 41.1 MB so far)
+2019-07-20 21:24:12 WARN  MemoryStore:66 - Not enough space to cache rdd_405_4 in memory! (computed 41.1 MB so far)
+2019-07-20 21:24:13 WARN  MemoryStore:66 - Not enough space to cache rdd_405_0 in memory! (computed 41.1 MB so far)
+[Stage 158:>                                                        (0 + 8) / 8]2019-07-20 21:26:02 WARN  MemoryStore:66 - Not enough space to cache rdd_405_3 in memory! (computed 41.1 MB so far)
+2019-07-20 21:26:02 WARN  MemoryStore:66 - Not enough space to cache rdd_405_4 in memory! (computed 41.1 MB so far)
+2019-07-20 21:26:02 WARN  MemoryStore:66 - Not enough space to cache rdd_405_7 in memory! (computed 41.1 MB so far)
+2019-07-20 21:26:02 WARN  MemoryStore:66 - Not enough space to cache rdd_405_0 in memory! (computed 41.1 MB so far)
+2019-07-20 21:26:02 WARN  MemoryStore:66 - Not enough space to cache rdd_405_6 in memory! (computed 41.1 MB so far)
+2019-07-20 21:26:02 WARN  MemoryStore:66 - Not enough space to cache rdd_405_5 in memory! (computed 41.1 MB so far)
+2019-07-20 21:26:02 WARN  MemoryStore:66 - Not enough space to cache rdd_405_1 in memory! (computed 41.1 MB so far)
+[Stage 160:>                                                        (0 + 8) / 8]2019-07-20 21:28:03 WARN  MemoryStore:66 - Not enough space to cache rdd_405_1 in memory! (computed 41.1 MB so far)
+2019-07-20 21:28:04 WARN  MemoryStore:66 - Not enough space to cache rdd_405_4 in memory! (computed 41.1 MB so far)
+2019-07-20 21:28:04 WARN  MemoryStore:66 - Not enough space to cache rdd_405_6 in memory! (computed 41.1 MB so far)
+2019-07-20 21:28:04 WARN  MemoryStore:66 - Not enough space to cache rdd_405_3 in memory! (computed 41.1 MB so far)
+2019-07-20 21:28:04 WARN  MemoryStore:66 - Not enough space to cache rdd_405_7 in memory! (computed 41.1 MB so far)
+2019-07-20 21:28:04 WARN  MemoryStore:66 - Not enough space to cache rdd_405_5 in memory! (computed 41.1 MB so far)
+2019-07-20 21:28:05 WARN  MemoryStore:66 - Not enough space to cache rdd_405_0 in memory! (computed 41.1 MB so far)
+validated_model: org.apache.spark.ml.tuning.CrossValidatorModel = cv_97c3377755a9
+
+scala> 
+
+scala> 
+
+scala> validated_model.write.overwrite().save("models/rf1")
+[Stage 169:>                                                        (0 + 8) / 8]2019-07-20 21:33:44 WARN  MemoryManager:115 - Total allocation exceeds 95.00% (906,992,014 bytes) of heap memory
+Scaling row group sizes to 96.54% for 7 writers
+2019-07-20 21:33:44 WARN  MemoryManager:115 - Total allocation exceeds 95.00% (906,992,014 bytes) of heap memory
+Scaling row group sizes to 84.47% for 8 writers
+2019-07-20 21:33:46 WARN  MemoryManager:115 - Total allocation exceeds 95.00% (906,992,014 bytes) of heap memory
+Scaling row group sizes to 96.54% for 7 writers
+2019-07-20 21:33:48 WARN  TaskSetManager:66 - Stage 170 contains a task of very large size (236 KB). The maximum recommended task size is 100 KB.
+[Stage 170:>                                                        (0 + 8) / 8]2019-07-20 21:33:49 WARN  MemoryManager:115 - Total allocation exceeds 95.00% (906,992,014 bytes) of heap memory
+Scaling row group sizes to 96.54% for 7 writers
+2019-07-20 21:33:49 WARN  MemoryManager:115 - Total allocation exceeds 95.00% (906,992,014 bytes) of heap memory
+Scaling row group sizes to 84.47% for 8 writers
+2019-07-20 21:33:52 WARN  MemoryManager:115 - Total allocation exceeds 95.00% (906,992,014 bytes) of heap memory
+Scaling row group sizes to 96.54% for 7 writers
+                                                                                
+scala> 
+
+scala> val test_predictions = validated_model.transform(testDf)
+test_predictions: org.apache.spark.sql.DataFrame = [features: vector, label: double ... 1 more field]
+
+scala> test_predictions.show(10)
++-------------+-----+-----------------+                                         
+|     features|label|       prediction|
++-------------+-----+-----------------+
+|    (7,[],[])|  4.0|6.581144228147968|
+|    (7,[],[])|  4.0|6.581144228147968|
+|    (7,[],[])|  5.0|6.581144228147968|
+|    (7,[],[])|  6.0|6.581144228147968|
+|    (7,[],[])|  6.0|6.581144228147968|
+|    (7,[],[])|  6.0|6.581144228147968|
+|    (7,[],[])|  9.0|6.581144228147968|
+|    (7,[],[])| 11.0|6.581144228147968|
+|    (7,[],[])| 16.0|6.581144228147968|
+|(7,[0],[1.0])|  8.0|5.400779449764275|
++-------------+-----+-----------------+
+only showing top 10 rows
+
+
+scala> 
+
+scala> val evaluator1 = new RegressionEvaluator().setLabelCol("label").setPredictionCol("prediction").setMetricName("rmse")
+evaluator1: org.apache.spark.ml.evaluation.RegressionEvaluator = regEval_0296445905c2
+
+scala> val test_rmse = evaluator1.evaluate(test_predictions)
+test_rmse: Double = 4.889978869332821                                           
+
+scala> println(s"Root Mean Squared Error (RMSE) on test data = $test_rmse")
+Root Mean Squared Error (RMSE) on test data = 4.889978869332821
+
+scala> 
+
+scala> val evaluator2 = new RegressionEvaluator().setLabelCol("label").setPredictionCol("prediction").setMetricName("mse")
+evaluator2: org.apache.spark.ml.evaluation.RegressionEvaluator = regEval_46c7cc4a6458
+
+scala> val test_mse = evaluator2.evaluate(test_predictions)
+test_mse: Double = 23.9118933425215                                             
+
+scala> println(s"Mean Squared Error (MSE) on test data = $test_mse")
+Mean Squared Error (MSE) on test data = 23.9118933425215
+
+
+scala> 
+
+scala> val evaluator3 = new RegressionEvaluator().setLabelCol("label").setPredictionCol("prediction").setMetricName("mae")
+evaluator3: org.apache.spark.ml.evaluation.RegressionEvaluator = regEval_2bdba25a2208
+
+scala> val test_mae = evaluator3.evaluate(test_predictions)
+test_mae: Double = 3.174010754309331                                            
+
+scala> println(s"Mean Absolute Error (MAE) on test data = $test_mae")
+Mean Absolute Error (MAE) on test data = 3.174010754309331
+
+scala> 
+
+

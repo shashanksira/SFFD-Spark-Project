@@ -1,0 +1,152 @@
+import org.apache.spark.ml.regression.LinearRegression
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types._
+import org.apache.spark.ml.evaluation.RegressionEvaluator
+import org.apache.spark.ml.feature.StringIndexer
+import org.apache.spark.ml.feature.VectorAssembler
+import org.apache.spark.ml.classification.LogisticRegression
+import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.SaveMode
+import org.apache.spark.ml.tuning.{ParamGridBuilder, CrossValidator}
+import org.apache.spark.ml.Pipeline
+import org.apache.spark.ml.regression.{RandomForestRegressionModel, RandomForestRegressor}
+
+// Reading data 
+val sampleData = spark.read.option("header", "true").csv("/home/shashank/Documents/gitWorkspace/SFFD-Spark-Project/Data/FireDepartmentBigHalfCleaned.csv").withColumn("response_time_double", $"response_time".cast(DoubleType ))
+
+// val data = spark.read.format("libsvm").load("sample_libsvm_data.txt")
+
+sampleData
+val sampleDataSubset = sampleData.select("Call_Type",
+    "Zipcode_of_Incident",
+    "Call_Type_Group",
+    "Unit_Type",
+    "Fire_Prevention_District",
+    "Supervisor_District",
+    "Received_month",
+    "Received_Hour",
+    "response_time_double").filter(
+    $"Call_Type".isNotNull
+    && $"Zipcode_of_Incident".isNotNull
+    && $"Unit_Type".isNotNull
+    && $"Fire_Prevention_District".isNotNull
+    && $"Supervisor_District".isNotNull
+    && $"Received_month".isNotNull
+    && $"Received_Hour".isNotNull
+    && $"response_time_double".isNotNull)
+    
+// Missing:    "avg_response_history")
+
+
+// Indexing
+val stringIndexerCallType = new StringIndexer().setInputCol("Call_Type").setOutputCol("call_type_vec")
+val stringIndexerZip = new StringIndexer().setInputCol("Zipcode_of_Incident").setOutputCol("zip_vec")
+val stringIndexerUnitType = new StringIndexer().setInputCol("Unit_Type").setOutputCol("unit_type_vec")
+val stringIndexerFPDistrict = new StringIndexer().setInputCol("Fire_Prevention_District").setOutputCol("fp_district_vec")
+val stringIndexerSupervisorDistrict = new StringIndexer().setInputCol("Supervisor_District").setOutputCol("super_district_vec")
+val stringIndexerReceivedMonth = new StringIndexer().setInputCol("Received_month").setOutputCol("rec_month_vec")
+val stringIndexerReceivedHour = new StringIndexer().setInputCol("Received_Hour").setOutputCol("rec_hour_vec")
+
+val pipeline = new Pipeline().setStages(Array(stringIndexerCallType, stringIndexerZip, stringIndexerUnitType, stringIndexerFPDistrict, stringIndexerSupervisorDistrict, stringIndexerReceivedMonth, stringIndexerReceivedHour))
+
+val pmModel = pipeline.fit(sampleDataSubset)
+
+val indexedDf1 = pmModel.transform(sampleDataSubset)
+val assembler1 = new VectorAssembler().setInputCols(Array("call_type_vec", "zip_vec", "unit_type_vec", "fp_district_vec", "super_district_vec", "rec_month_vec", "rec_hour_vec")).setOutputCol("features")
+
+val featureDf = assembler1.transform(indexedDf1).select($"features", $"response_time_double".as("label"))
+
+val Array(trainingDf, testDf) = featureDf.randomSplit(Array(0.1, 0.9), seed = 12345)
+
+
+
+// parameter tuning
+
+def my_tuning(df1:DataFrame, numTrees:Int, maxDepth:Int) : Double = {
+
+val Array(trainingValDf, testValDf) = df1.randomSplit(Array(0.8, 0.2))
+val rf = new RandomForestRegressor().setLabelCol("label").setFeaturesCol("features").setNumTrees(numTrees).setMaxDepth(maxDepth)
+val pipeline = new Pipeline().setStages(Array(rf)) 
+
+val rf_model = rf.fit(trainingValDf)
+val val_predictions = rf_model.transform(testValDf)
+
+val evaluator = new RegressionEvaluator().setLabelCol("label").setPredictionCol("prediction").setMetricName("rmse")
+val val_rmse = evaluator.evaluate(val_predictions)
+
+return val_rmse
+}
+
+for(numTrees <- 5 to 15; maxDepth <- 5 to 15){
+println("numTrees = "+numTrees+", maxDepth = "+maxDepth+"|===============================|-----------------|\n"+"\tRoot Mean Squared Error (RMSE) on validation data = ", my_tuning(trainingDf, numTrees, maxDepth) + "\n===========================================================|-----------------|")
+}
+
+
+
+
+
+
+// kfold validation
+
+def my_kfold(df1:DataFrame, k:Int) : Double = {
+
+val Array(trainingValDf, testValDf) = df1.randomSplit(Array(0.8, 0.2), seed = k)
+val rf = new RandomForestRegressor().setLabelCol("label").setFeaturesCol("features").setNumTrees(10).setMaxDepth(10)
+val pipeline = new Pipeline().setStages(Array(rf)) 
+
+val rf_model = rf.fit(trainingValDf)
+val val_predictions = rf_model.transform(testValDf)
+
+val evaluator = new RegressionEvaluator().setLabelCol("label").setPredictionCol("prediction").setMetricName("rmse")
+val val_rmse = evaluator.evaluate(val_predictions)
+
+return val_rmse
+}
+
+
+for(k <- 1 to 1){
+println("===========================================================|-----------------|\n"+"\tRoot Mean Squared Error (RMSE) on validation data = ", my_kfold(trainingDf, k) + "\n===========================================================|-----------------|")
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
